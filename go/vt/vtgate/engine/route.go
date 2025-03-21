@@ -201,7 +201,9 @@ func (route *Route) executeShards(
 		}
 	}
 
-	if len(route.OrderBy) != 0 {
+	// If the query is routed to a single shard, we know the result of the shard would be the final result and skip sorting.
+	needSorting := len(route.OrderBy) > 0 && len(rss) > 1
+	if needSorting {
 		var err error
 		result, err = route.sort(result)
 		if err != nil {
@@ -279,7 +281,9 @@ func (route *Route) streamExecuteShards(
 		}
 	}
 
-	if len(route.OrderBy) == 0 {
+	// If the query is routed to a single shard, we know the result of the shard would be the final result and skip sorting.
+	needSorting := len(route.OrderBy) > 0 && len(rss) > 1
+	if !needSorting {
 		errs := vcursor.StreamExecuteMulti(ctx, route, route.Query, rss, bvs, false /* rollbackOnError */, false /* autocommit */, route.FetchLastInsertID, func(qr *sqltypes.Result) error {
 			return callback(qr.Truncate(route.TruncateColumnCount))
 		})
@@ -296,7 +300,7 @@ func (route *Route) streamExecuteShards(
 		return nil
 	}
 
-	// There is an order by. We have to merge-sort.
+	// There is an 'order by' that cannot be skipped. We have to merge-sort.
 	return route.mergeSort(ctx, vcursor, bindVars, wantfields, callback, rss, bvs)
 }
 
